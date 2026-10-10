@@ -1,0 +1,9 @@
+{
+  "kcp_iw10": {
+    "source": "candidates/iw10.c",
+    "hypothesis": "Starting with ten in-flight segments reduces the startup backlog on distant links while retaining built-in congestion control.",
+    "kind": "configuration experiment",
+    "status": "experimental",
+    "author": "AI-assisted"
+  }
+}

@@ -1,0 +1,52 @@
+site_name: Transport Lab
+site_description: Learning transport strategies, from KCP and UDP to GPU networking.
+site_url: https://georgepearse.github.io/kcp/
+repo_url: https://github.com/GeorgePearse/kcp
+repo_name: GeorgePearse/kcp
+edit_uri: edit/docs/learning-fork-callout/docs/
+strict: true
+theme:
+  name: material
+  font: false
+  palette:
+    - scheme: default
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.footer
+    - content.code.copy
+    - search.highlight
+plugins:
+  - search
+markdown_extensions:
+  - admonition
+  - attr_list
+  - pymdownx.details
+  - pymdownx.superfences
+  - tables
+  - toc:
+      permalink: true
+extra_css:
+  - stylesheets/extra.css
+nav:
+  - Start here: index.md
+  - Transport fundamentals: transports.md
+  - The experiment:
+      - Benchmark and results: benchmark.md
+      - Iterating on algorithms: iteration.md
+      - Stable video capacity: video-experiments.md
+      - Short video payload pilot: video-payload-pilot.md
+  - GPU networks:
+      - From tensors to packets: gpu-transport.md
+      - Network cards and switches: hardware.md
+  - Building and publishing: publishing.md

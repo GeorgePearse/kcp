@@ -1,0 +1,104 @@
+{
+  "id": "transport-v2",
+  "message_bytes": 256,
+  "count": 500,
+  "interval_us": 10000,
+  "drain_us": 4000000,
+  "deadline_ms": 100,
+  "queue_limit": 10000,
+  "baseline_sha256": {
+    "ikcp.c": "8654038a70d1bbe605aa94f066554ffb30bf28580a58769970221de3ba5027f0",
+    "ikcp.h": "d67a0e67ba5701f1e882894b4415c4d3ad3d7d9f7231dd2ca68c6037c5217933"
+  },
+  "profiles": {
+    "clean": {
+      "split": "development",
+      "netem": [
+        "delay",
+        "2ms"
+      ]
+    },
+    "distant": {
+      "split": "development",
+      "netem": [
+        "delay",
+        "50ms"
+      ]
+    },
+    "jitter_loss": {
+      "split": "development",
+      "netem": [
+        "delay",
+        "50ms",
+        "20ms",
+        "distribution",
+        "normal",
+        "loss",
+        "random",
+        "1%"
+      ]
+    },
+    "burst_loss": {
+      "split": "development",
+      "netem": [
+        "delay",
+        "20ms",
+        "loss",
+        "gemodel",
+        "1%",
+        "25%",
+        "80%",
+        "0%"
+      ]
+    },
+    "constrained": {
+      "split": "development",
+      "netem": [
+        "delay",
+        "20ms",
+        "rate",
+        "128kbit"
+      ]
+    },
+    "outage": {
+      "split": "development",
+      "netem": [
+        "delay",
+        "20ms"
+      ]
+    },
+    "reorder_duplicate": {
+      "split": "correctness",
+      "netem": [
+        "delay",
+        "20ms",
+        "10ms",
+        "reorder",
+        "25%",
+        "50%",
+        "duplicate",
+        "10%"
+      ]
+    },
+    "validation_delay_loss": {
+      "split": "validation",
+      "netem": [
+        "delay",
+        "80ms",
+        "5ms",
+        "loss",
+        "random",
+        "0.5%"
+      ]
+    },
+    "validation_rate": {
+      "split": "validation",
+      "netem": [
+        "delay",
+        "35ms",
+        "rate",
+        "256kbit"
+      ]
+    }
+  }
+}

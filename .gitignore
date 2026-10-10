@@ -67,3 +67,8 @@ __pycache__/*
 nul
 
 
+
+!/justfile
+
+/site/
+/.venv-docs/
