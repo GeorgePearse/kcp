@@ -53,7 +53,9 @@ For a small learning exercise, compare KCP, ENet, and TCP with the same payloads
 The [sender/receiver benchmark](benchmarks/network/README.md) compares plain UDP, KCP with congestion control on/off, ENet, TCP, and registered experimental candidates using real processes and isolated Linux network namespaces. It generates an interactive report and preserves raw measurements. The [algorithm iteration workflow](benchmarks/network/ITERATING.md) keeps the workload and controls fixed while AI-assisted candidates are tested and recorded.
 
 
-The [video-payload pilot](benchmarks/video/README.md) sends actual H.264 and MJPEG segments through TCP, KCP and UDP, measuring complete video and playback deadlines. See the [video documentation](https://georgepearse.github.io/kcp/video-experiments/).
+The [sustained video benchmark](benchmarks/sustained_video/README.md) searches for the highest confirmed video bitrate on degraded links with a fixed playback buffer, zero deadline misses and bounded latency growth.
+
+The earlier [video-payload pilot](benchmarks/video/README.md) sends actual H.264 and MJPEG segments through TCP, KCP and UDP, measuring complete video and playback deadlines. See the [video documentation](https://georgepearse.github.io/kcp/video-experiments/).
 
 # Technical Specifications
 

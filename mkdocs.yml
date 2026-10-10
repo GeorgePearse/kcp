@@ -44,7 +44,8 @@ nav:
   - The experiment:
       - Benchmark and results: benchmark.md
       - Iterating on algorithms: iteration.md
-      - Video delivery experiments: video-experiments.md
+      - Stable video capacity: video-experiments.md
+      - Short video payload pilot: video-payload-pilot.md
   - GPU networks:
       - From tensors to packets: gpu-transport.md
       - Network cards and switches: hardware.md

@@ -1,52 +1,63 @@
-# How much video can the network carry?
+# Stable video capacity on bad networks
 
-This pilot sends **actual encoded video bytes** through the same kind of isolated Linux sender/router/receiver network used by the small-message benchmark. It measures how much complete video arrives, and how much arrives soon enough for a chosen playback deadline.
+The question is **how much video we can continuously carry without stalling playback**, not how many bytes eventually arrive. This benchmark sweeps video bitrate and confirms the highest passing rates with longer runs.
 
-[Explore the video delivery report](reports/video-v1.html){ .md-button .md-button--primary }
+[Explore sustainable bitrate results](reports/sustained-video-v1.html){ .md-button .md-button--primary }
 
-## Workload
+## What “stable” means
 
-The sources are existing edge-test fixtures: four seconds of conveyor footage and the first four seconds of a Big Buck Bunny clip. The Bunny opening is smooth and low-detail; the conveyor contains textured moving material. These are a small pilot, not a representative video corpus.
+The virtual player has a fixed **two-second playout offset**. Every one-second video segment must be complete by its scheduled playback time. We also reject a run if mean delivery latency grows by more than 250ms between the first ten and last ten segments, even if the buffer has not yet run dry.
 
-Both are encoded at **1920×1080, 10fps**, using either H.264 (libx264 veryfast, CRF23, no B frames) or MJPEG (quality 4). Each one-second segment is independently decodable. The settings are not matched for visual quality; this does not measure codec quality or downstream detection accuracy.
+No skipped segments, adaptive bitrate or ever-growing buffer can turn a failure into a pass. The report shows deadline failures, accumulated extra stall time and delivery latency over time. Missing segments produce a lower bound on stall time at the observation cutoff.
 
-| Source | H.264 encoded bitrate | MJPEG encoded bitrate |
-| --- | ---: | ---: |
-| Conveyor | 7.357 Mbit/s | 12.991 Mbit/s |
-| Bunny opening | 0.951 Mbit/s | 4.993 Mbit/s |
+## Find a capacity bound
 
-These rates include the segment container, before network/protocol overhead. A link needs additional headroom. The large difference between clips shows why resolution and FPS alone do not determine video bandwidth.
+1. Encode actual conveyor footage at six requested H.264 rates: 0.25, 0.5, 1, 2, 4 and 5.5 Mbit/s.
+2. Screen each rate for **30 seconds** with TCP, KCP and plain UDP on each network profile.
+3. Test the highest screened pass and next higher rate in **two independent 90-second runs**.
+4. If the selected rate fails confirmation, step down and test the next lower rate twice.
+5. Report the highest confirmed actual bitrate and any tested failing upper neighbour.
 
-## Network experiment
+Actual encoded rates include segment/container overhead and differ from encoder targets. A result is a tested bound, not proof of an exact continuous maximum or a guarantee for arbitrary outages.
 
-The suite runs TCP, KCP with built-in congestion control, and best-effort UDP. Each receives the same encoded payload, packet framing and pacing schedule. There are four profiles, each with 20ms delay per direction: 20 Mbit/s, 5 Mbit/s, 5 Mbit/s with 1% random loss, and 1 Mbit/s. Two repeats across all combinations produce **96 trials**. Three trials run concurrently on the same host.
+## The bad networks
 
-Each trial offers four seconds of video over four seconds, then permits three seconds to drain. A segment is **complete** only when its SHA-256 matches the original. It is **on time** only if complete within 1.5 seconds of its scheduled release. Every source segment was decoded to ten frames before transmission.
+Both directions have a **5 Mbit/s** limit and a 1,000-packet queue:
 
-A partly received segment earns byte-delivery credit but no usable-video credit. That is intentionally conservative: a specialised decoder could recover some frames from a damaged stream. It does not mean every UDP/RTP streaming system would lose as much video as this simple no-retry framing.
+| Profile | Additional impairment, each direction |
+| --- | --- |
+| Loss and jitter | 40ms delay, 10ms normal jitter, 1% independent random loss |
+| Burst loss | 20ms delay; Gilbert–Elliott bad-state entry1%, exit25%, bad-state loss80%, good-state loss0% |
 
-## What this tells us about the edge
+Real sender/receiver processes run in separate Linux namespaces through a netem router. Random loss is unseeded. This exploratory run uses three concurrent isolated trials on one host.
 
-At these settings, a 5 Mbit/s uplink cannot carry the conveyor's H.264 output in real time even before transport overhead. The Bunny clip fits much more easily. Choosing an appropriate encoding, frame rate or resolution is therefore necessary before tuning transport.
+## Video and transport contract
 
-The 20 Mbit/s capacity control distinguishes link saturation from transport startup and window behaviour. KCP uses the existing small-window controller, not a video-tuned configuration. Slow results here do not establish a limit on every possible KCP configuration.
+The five-second conveyor edge fixture is encoded into independently decodable one-second H.264 segments at 1080p/10fps, then repeated. Each source segment is decoded and frame-counted before testing. Every received segment must match its SHA-256 before it can be played. The entire offered timeline stays in the denominator.
 
-Use the report to compare **complete seconds**, **on-time seconds**, received payload and transmitted traffic. Looking at bytes alone can hide scattered losses that prevent reconstruction; looking only at latency of successful deliveries can hide missing video.
+TCP uses CUBIC and NODELAY. KCP uses built-in congestion control and128-segment windows; these are baseline settings, not a video-tuned controller. UDP has fragment metadata but no recovery or FEC. Requiring complete segments is more conservative than players that conceal packet damage or recover partial frames.
 
-## A concrete loss comparison
+Media is pre-encoded. This measures transport and a deterministic playback model; it does not run a live GStreamer/RTP/RTSP player or include capture/encoding time. Lower bitrates can reduce visual quality, which this benchmark does not evaluate. QUIC, TLS, production GCS and physical WAN links are not tested here.
 
-For the Bunny H.264 clip on the 5 Mbit/s link with 1% loss, across two repeats:
+## Measured capacity bounds
 
-| Transport | Complete seconds / 8 offered | On-time seconds / 8 offered |
-| --- | ---: | ---: |
-| TCP | 8 | 8 |
-| KCP | 8 | 6 |
-| UDP | 2 | 2 |
+The completed run contains **36 × 30-second screens and 20 × 90-second confirmations**: 48 minutes of offered video across 56 trials. Every confirmed rate below passed both long repeats.
 
-The clean 20 Mbit/s control delivered all eight conveyor seconds on time with TCP and UDP for both encodings. At 5 Mbit/s, neither encoding delivered any complete conveyor segment within the chosen deadline, regardless of transport. TCP still completed all eight H.264 seconds during the longer observation window: complete delivery and timely playback are different outcomes.
+| Network | Transport | Highest confirmed actual video bitrate | Higher tested failure |
+| --- | --- | ---: | ---: |
+| loss_jitter | tcp | 0.581 Mbit/s | 1.152 Mbit/s |
+| loss_jitter | kcp | 0.295 Mbit/s | 0.581 Mbit/s |
+| loss_jitter | udp | None demonstrated | 0.295 Mbit/s (lowest tested) |
+| burst_loss | tcp | None demonstrated | 0.295 Mbit/s (lowest tested) |
+| burst_loss | kcp | None demonstrated | 0.295 Mbit/s (lowest tested) |
+| burst_loss | udp | None demonstrated | 0.295 Mbit/s (lowest tested) |
 
-## Reproduce and inspect
+On the loss/jitter link, TCP passed at **0.581 Mbit/s** and KCP at **0.295 Mbit/s**. At1.152 Mbit/s, one TCP confirmation delivered all90 segments by their deadlines but still failed because mean latency grew by344ms. Byte delivery or a short run would miss that warning sign.
 
-The [benchmark README](https://github.com/GeorgePearse/kcp/blob/docs/learning-fork-callout/benchmarks/video/README.md) documents dependencies, commands and the fixed workload. The [results ledger](https://github.com/GeorgePearse/kcp/blob/docs/learning-fork-callout/benchmarks/video/RESULTS.md) contains every aggregate comparison and validation details. Source hashes, segment hashes, raw arrivals, network commands and counters are retained with the run.
+No transport demonstrated a stable rate on the burst-loss profile at the tested rates, down to0.295 Mbit/s. This does not establish that a lower rate, different buffer budget, FEC or another transport configuration cannot work.
 
-This is separate from the original transport-v2 benchmark. It uses pre-encoded media, excludes capture/encoding cost, and does not run GStreamer, RTP/RTSP, QUIC, TLS or the production GCS uploader. Random loss is unseeded and two repeats are exploratory. Raw footage is not included in this public documentation.
+## Evidence and reproduction
+
+See the [frozen benchmark contract](https://github.com/GeorgePearse/kcp/blob/docs/learning-fork-callout/benchmarks/sustained_video/README.md) and [results ledger](https://github.com/GeorgePearse/kcp/blob/docs/learning-fork-callout/benchmarks/sustained_video/RESULTS.md). All failed trials, arrival records, network counters and source/segment hashes are retained. Raw footage is not in this public site.
+
+The [earlier four-second payload pilot](video-payload-pilot.md) is retained separately. It measured short-run delivery and codec sizes; it does **not** establish sustainable streaming capacity.
