@@ -1,3 +1,6 @@
+> [!WARNING]
+> This is a slop fork for me to learn about different transport strategies.
+
 KCP - A Fast and Reliable ARQ Protocol
 ======================================
 
