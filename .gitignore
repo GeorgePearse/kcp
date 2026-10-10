@@ -67,3 +67,5 @@ __pycache__/*
 nul
 
 
+
+!/justfile

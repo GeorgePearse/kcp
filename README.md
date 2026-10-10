@@ -18,7 +18,7 @@ KCP - A Fast and Reliable ARQ Protocol
 [7]: https://github.com/skywind3000/kcp/blob/master/LICENSE
 
 > English-first fork of [skywind3000/kcp](https://github.com/skywind3000/kcp).
-> The README below is upstream's English documentation with a fork-specific alternatives section; implementation and license are unchanged.
+> The README below is upstream's English documentation with fork-specific alternatives and experiments; the upstream KCP implementation and license are unchanged.
 > [Original Chinese README](README.zh-CN.md) · [English protocol specification](protocol.txt)
 >
 > Performance comparisons below are upstream claims, not measurements of this fork.
@@ -48,7 +48,7 @@ These are different transport strategies to explore alongside KCP. They overlap 
 
 For a small learning exercise, compare KCP, ENet, and TCP with the same payloads, network delay, packet loss, and bandwidth limit. Measure delivery latency and bandwidth rather than assuming one is always faster.
 
-The [sender/receiver benchmark](benchmarks/network/README.md) runs that experiment with real processes and isolated Linux network namespaces, and generates an interactive report for six simulated network profiles.
+The [sender/receiver benchmark](benchmarks/network/README.md) compares plain UDP, KCP with congestion control on/off, ENet, TCP, and registered experimental candidates using real processes and isolated Linux network namespaces. It generates an interactive report and preserves raw measurements. The [algorithm iteration workflow](benchmarks/network/ITERATING.md) keeps the workload and controls fixed while AI-assisted candidates are tested and recorded.
 
 
 # Technical Specifications

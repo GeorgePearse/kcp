@@ -3,7 +3,6 @@
 import argparse
 import concurrent.futures
 import hashlib
-import html
 import json
 import os
 from pathlib import Path
@@ -15,14 +14,12 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
-PROFILES = {
-    "clean": ["delay", "2ms"],
-    "distant": ["delay", "50ms"],
-    "jitter_loss": ["delay", "50ms", "20ms", "distribution", "normal", "loss", "random", "1%"],
-    "burst_loss": ["delay", "20ms", "loss", "gemodel", "1%", "25%", "80%", "0%"],
-    "constrained": ["delay", "20ms", "rate", "128kbit"],
-    "outage": ["delay", "20ms"],
-}
+BENCH = Path(__file__).resolve().parent
+SUITE = json.loads((BENCH / "suite.json").read_text())
+PROFILES = {name: item["netem"] for name, item in SUITE["profiles"].items()}
+BUILTINS = ["udp", "kcp", "kcp_nocc", "enet", "tcp"]
+from metrics import summarize_rows
+
 
 def command(args, **kwargs):
     return subprocess.run([str(x) for x in args], check=True, text=True,
@@ -31,13 +28,7 @@ def command(args, **kwargs):
 def nscommand(ns, *args):
     return ["ip", "netns", "exec", ns, *map(str, args)]
 
-def percentile(values, p):
-    if not values:
-        return None
-    ordered = sorted(values)
-    return ordered[max(0, (len(ordered) * p + 99) // 100 - 1)]
-
-def trial(binary, out, protocol, profile, repeat, count, interval):
+def trial(binary, peer_protocol, out, protocol, profile, repeat, count, interval):
     name = f"{profile}-{protocol}-{repeat}"
     folder = out / name
     folder.mkdir()
@@ -71,7 +62,7 @@ def trial(binary, out, protocol, profile, repeat, count, interval):
         inside(sender_ns, "/sbin/sysctl", "-qw", "net.ipv4.tcp_congestion_control=cubic")
         # Resolve neighbours and check routing before connection setup or impairment.
         inside(sender_ns, "ping", "-c", "1", "-W", "2", "10.203.20.2")
-        args = [binary, protocol, "recv", "10.203.20.2", count, interval]
+        args = [binary, peer_protocol, "recv", "10.203.20.2", count, interval]
         with (folder / "receiver.csv").open("w") as output, (folder / "receiver.stderr").open("w") as errors:
             receiver = subprocess.Popen(nscommand(receiver_ns, *args), stdout=output, stderr=errors)
             children.append(receiver)
@@ -83,7 +74,8 @@ def trial(binary, out, protocol, profile, repeat, count, interval):
             args[2] = "send"
             with (folder / "sender.stderr").open("w") as sender_errors:
                 sender = subprocess.Popen(nscommand(sender_ns, *args), stdin=subprocess.PIPE,
-                                          stdout=subprocess.PIPE, stderr=sender_errors, text=True)
+                                          stdout=subprocess.PIPE, stderr=sender_errors, text=True,
+                                          env={**os.environ, "KCP_TRACE": str(folder / "kcp-trace.csv")})
                 children.append(sender)
                 if not select.select([sender.stdout], [], [], 6)[0] or sender.stdout.readline() != "READY\n":
                     raise RuntimeError(f"{name}: sender failed to connect")
@@ -105,9 +97,10 @@ def trial(binary, out, protocol, profile, repeat, count, interval):
                 sender.wait(timeout=count * interval / 1e6 + 10)
                 sender_output = sender.stdout.read()
                 (folder / "sender.stdout").write_text("READY\n" + sender_output)
-                if sender.returncode or sender_output.strip() != f"SENT {count}":
+                if sender.returncode or not sender_output.startswith("START ") or sender_output.splitlines()[-1] != f"SENT {count}":
                     raise RuntimeError(f"{name}: sender failed: {sender_output}")
-                # Sender has already serviced retransmissions for a four-second drain.
+                start_us = int(sender_output.splitlines()[0].split()[1])
+                # Score a fixed sender-clock cutoff even if collection runs slightly later.
                 after = counters()
                 qdisc = {dev: json.loads(inside(router_ns, "/sbin/tc", "-s", "-j", "qdisc", "show", "dev", dev))
                          for dev in ("left", "right")}
@@ -118,21 +111,17 @@ def trial(binary, out, protocol, profile, repeat, count, interval):
         for line in (folder / "receiver.csv").read_text().splitlines()[1:]:
             seq, sent, arrived = map(int, line.split(","))
             rows.append([seq, sent, arrived])
-        if [r[0] for r in rows] != list(range(len(rows))) or len(rows) > count:
-            raise RuntimeError("Non-contiguous received sequence")
-        latencies = [(r[2] - r[1]) / 1000 for r in rows]
-        if any(x < 0 for x in latencies):
-            raise RuntimeError("Clock error")
-        result = dict(protocol=protocol, profile=profile, repeat=repeat, offered=count,
-                      received=len(rows), within_100ms=sum(x <= 100 for x in latencies),
-                      p50_ms=percentile(latencies, 50), p95_ms=percentile(latencies, 95),
-                      p99_ms=percentile(latencies, 99), max_ms=max(latencies, default=None),
+        metrics = summarize_rows(rows, count, interval, start_us, SUITE["drain_us"],
+                                 SUITE["deadline_ms"], reliable=protocol != "udp")
+        result = dict(protocol=protocol, peer_protocol=peer_protocol, profile=profile, repeat=repeat,
+                      delivery_contract="best-effort datagrams" if protocol == "udp" else "reliable ordered",
+                      **metrics,
                       endpoint_tx_bytes=sum(a["bytes"] - b["bytes"] for a, b in zip(after, before)),
                       endpoint_tx_packets=sum(a["packets"] - b["packets"] for a, b in zip(after, before)),
                       netem=PROFILES[profile], events=events, qdisc=qdisc, before=before, after=after,
-                      latency_ms=latencies, sequence=[r[0] for r in rows])
+                      start_us=start_us)
         (folder / "result.json").write_text(json.dumps(result, indent=2))
-        print(f"{name}: {len(rows)}/{count}, p95={result['p95_ms']} ms, within100ms={result['within_100ms']}", flush=True)
+        print(f"{name}: {metrics['received']}/{count}, p95={result['p95_ms']} ms, within100ms={result['within_100ms']}", flush=True)
         return result
     finally:
         for child in children:
@@ -150,68 +139,109 @@ def trial(binary, out, protocol, profile, repeat, count, interval):
 def report(out, results, metadata):
     # All assets/data are embedded so this report works offline.
     data = json.dumps(dict(results=results, metadata=metadata)).replace("<", "\\u003c")
-    page = '''<!doctype html><meta charset="utf-8"><title>KCP / ENet / TCP network experiment</title>
-<style>body{font:16px system-ui;max-width:1150px;margin:35px auto;padding:0 20px;color:#182335}h1{font-size:30px}table{border-collapse:collapse;width:100%;margin:20px 0}td,th{text-align:left;padding:9px;border-bottom:1px solid #ddd}select{font:inherit;padding:8px}svg{width:100%;border:1px solid #ddd}pre{white-space:pre-wrap;background:#f3f5f8;padding:16px}.note{background:#eef3ff;padding:15px}small{color:#526075}</style>
-<h1>Same messages, degraded networks</h1>
-<p>Real KCP, ENet and TCP sender/receiver processes, routed through isolated Linux network namespaces.</p>
-<p class="note">Exploratory local pilot, not a universal ranking. Each run offers 256-byte messages at 100/s, followed by a 4-second drain. Latency starts at the scheduled send time and ends at application delivery; it includes sender backpressure. Connections are established before impairment. All received payloads and sequence order are checked.</p>
-<label>Network profile: <select id="profile"></select></label><div id="settings"></div><div id="summary"></div>
-<h2>Delivery latency over the run</h2><p>Blue: KCP · Orange: ENet · Green: TCP. One line per repeat. X: scheduled send time; Y: one-way application delivery latency.</p><svg id="chart" viewBox="0 0 1000 360"></svg>
-<h2>How to interpret this</h2><p>Deadline success uses all offered messages as the denominator. Latency percentiles include only delivered messages, pooled across repeats. Missing messages did not arrive within the bounded observation window; this does not prove permanent loss. TX bytes are combined endpoint interface counters after connection setup, including retransmissions, ACKs and link headers; these are not physical-wire bandwidth measurements.</p>
-<p>KCP: nodelay=1, interval=10ms, fastresend=2, congestion control enabled, windows=128, MTU=1200. ENet: one reliable ordered channel, MTU=1200, default reliability/congestion settings. TCP: CUBIC, TCP_NODELAY, fixed 256-byte message framing. Encryption is absent for all three. Every process uses a 1ms service loop. Offloads TSO/GSO/GRO are disabled on all test interfaces.</p>
-<p>Profiles apply independently on both router egress interfaces. Delay values are per direction, so 50ms gives approximately 100ms RTT before queueing. The 128kbit/s profile is deliberately below the 204.8kbit/s application load. Burst loss uses a two-state Gilbert–Elliott model. The outage drops packets for approximately two seconds, starting two seconds after GO; exact transitions are recorded per run. Random trials are unseeded; repeat parameters are reproducible, packet loss sequences are not. No real Wi-Fi or cellular traces are used.</p>
-<details><summary>Environment and provenance</summary><pre id="metadata"></pre></details>
-<script>const DATA=__DATA__;const results=DATA.results;const colors={kcp:'#2468df',enet:'#d66b12',tcp:'#148257'};
-const select=document.querySelector('#profile');for(const p of [...new Set(results.map(r=>r.profile))])select.add(new Option(p,p));
-function percentile(a,p){a=[...a].sort((a,b)=>a-b);return a.length?a[Math.ceil(a.length*p)-1]:null}function fmt(x){return x===null?'—':x.toFixed(1)}
-function draw(){const rows=results.filter(r=>r.profile===select.value);document.querySelector('#settings').textContent='Router egress: netem limit 10000 '+rows[0].netem.join(' ');
-let t='<table><tr><th>Transport</th><th>Runs</th><th>Delivered / offered</th><th>Within 100ms</th><th>p50 ms</th><th>p95 ms</th><th>p99 ms</th><th>TX / payload bytes</th></tr>';
-for(const p of ['kcp','enet','tcp']){const rr=rows.filter(r=>r.protocol===p);if(!rr.length)continue;const a=rr.flatMap(r=>r.latency_ms),sum=k=>rr.reduce((s,r)=>s+r[k],0);t+=`<tr><td>${p}</td><td>${rr.length}</td><td>${sum('received')} / ${sum('offered')}</td><td>${(100*sum('within_100ms')/sum('offered')).toFixed(1)}%</td><td>${fmt(percentile(a,.5))}</td><td>${fmt(percentile(a,.95))}</td><td>${fmt(percentile(a,.99))}</td><td>${(sum('endpoint_tx_bytes')/(sum('offered')*256)).toFixed(2)}×</td></tr>`}document.querySelector('#summary').innerHTML=t+'</table>';
-const maxY=Math.max(10,...rows.map(r=>r.max_ms||0))*1.08,maxX=DATA.metadata.count*DATA.metadata.interval_us/1e6;let svg='';for(let i=0;i<=4;i++){const y=320-i*75;svg+=`<line x1="65" y1="${y}" x2="975" y2="${y}" stroke="#ddd"/><text x="5" y="${y}" font-size="12">${(i*maxY/4).toFixed(0)} ms</text><text x="${65+i*910/4}" y="348" font-size="12">${(i*maxX/4).toFixed(1)} s</text>`}for(const r of rows){const points=r.latency_ms.map((v,i)=>`${65+910*r.sequence[i]*DATA.metadata.interval_us/1e6/maxX},${320-300*v/maxY}`).join(' ');svg+=`<polyline points="${points}" fill="none" stroke="${colors[r.protocol]}" stroke-width="1.4" opacity=".65"/>`}document.querySelector('#chart').innerHTML=svg;}
-select.onchange=draw;draw();document.querySelector('#metadata').textContent=JSON.stringify(DATA.metadata,null,2);</script>'''
+    page = (BENCH / "report.html").read_text()
     (out / "report.html").write_text(page.replace("__DATA__", data))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=Path)
     parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--count", type=int, default=500)
-    parser.add_argument("--jobs", type=int, default=3)
-    parser.add_argument("--profiles", nargs="+", choices=PROFILES, default=list(PROFILES))
-    parser.add_argument("--protocols", nargs="+", choices=["kcp", "enet", "tcp"], default=["kcp", "enet", "tcp"])
+    parser.add_argument("--count", type=int, default=SUITE["count"])
+    parser.add_argument("--interval-us", type=int, default=SUITE["interval_us"])
+    parser.add_argument("--jobs", type=int, default=1)
+    parser.add_argument("--split", choices=["development", "validation", "correctness"], default="development")
+    parser.add_argument("--profiles", nargs="+", choices=PROFILES)
+    parser.add_argument("--protocols", nargs="+", choices=BUILTINS, default=BUILTINS)
+    registry = json.loads((BENCH / "candidates/registry.json").read_text())
+    parser.add_argument("--candidates", nargs="+", choices=registry, default=[])
+    parser.add_argument("--list", action="store_true", help="List baseline and experimental variants without running")
     args = parser.parse_args()
+    if args.list:
+        print(json.dumps({"baselines": BUILTINS, "candidates": registry}, indent=2)); return
     if os.geteuid() != 0:
         parser.error("Run with sudo: network namespace creation needs root")
-    if not 1 <= args.count <= 100000 or args.jobs < 1 or args.repeats < 1:
-        parser.error("Invalid count/jobs/repeats")
-    if "outage" in args.profiles and args.count < 500:
-        parser.error("The outage profile requires at least 500 messages")
+    if not args.out:
+        parser.error("--out is required")
+    if not 1 <= args.count <= 100000 or args.jobs < 1 or args.repeats < 1 or args.interval_us < 1000:
+        parser.error("Invalid count/jobs/repeats/interval")
+    profiles = args.profiles or [p for p, spec in SUITE["profiles"].items() if spec["split"] == args.split]
+    if len(profiles) != len(set(profiles)) or len(args.protocols) != len(set(args.protocols)) or len(args.candidates) != len(set(args.candidates)):
+        parser.error("Duplicate selections would overwrite trial artifacts")
+    if "outage" in profiles and args.count * args.interval_us < 5000000:
+        parser.error("The outage profile requires at least five seconds of offered messages")
+    if SUITE["message_bytes"] != 256 or SUITE["drain_us"] != 4000000 or SUITE["deadline_ms"] != 100 or SUITE["queue_limit"] != 10000:
+        parser.error("This harness supports only the v2 message size/drain/deadline/queue contract")
+    for source, expected in SUITE["baseline_sha256"].items():
+        if hashlib.sha256((ROOT / source).read_bytes()).hexdigest() != expected:
+            parser.error("Baseline source changed. Put experiments in candidates/ or deliberately version the suite.")
     for tool in ("ip", "ping", "/sbin/tc", "/sbin/ethtool", "/usr/bin/cc"):
         if not shutil.which(tool):
             parser.error(f"Missing tool: {tool}")
     out = args.out.resolve(); out.mkdir(parents=True, exist_ok=False)
-    binary = out / "peer"
-    command(["/usr/bin/cc", "-O2", "-Wall", "-Wextra", "-Werror", "-I", ROOT, "-c", ROOT / "benchmarks/network/peer.c", "-o", out / "peer.o"])
-    command(["/usr/bin/cc", "-O2", "-I", ROOT, out / "peer.o", ROOT / "ikcp.c", "-lenet", "-o", binary])
-    sources = ["ikcp.c", "ikcp.h", "benchmarks/network/peer.c", "benchmarks/network/run.py"]
-    metadata = dict(kernel=platform.uname()._asdict(), count=args.count, interval_us=10000,
-                    repeats=args.repeats, jobs=args.jobs, profiles=args.profiles, protocols=args.protocols,
+    sources = ["ikcp.c", "ikcp.h"] + [str(p.relative_to(ROOT)) for p in BENCH.rglob("*")
+              if p.is_file() and p.suffix in {".c", ".py", ".json", ".html"} and "__pycache__" not in p.parts]
+    source_hashes = {}
+    for source in sources:
+        destination = out / "source" / source
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes((ROOT / source).read_bytes())
+        source_hashes[source] = hashlib.sha256(destination.read_bytes()).hexdigest()
+    frozen = out / "source"
+    frozen_bench = frozen / "benchmarks/network"
+    build_commands = []
+    def compile_peer(name, candidate=None):
+        obj = out / (name + ".o")
+        binary = out / name
+        cmd = ["/usr/bin/cc", "-O2", "-Wall", "-Wextra", "-Werror", "-I", frozen]
+        if candidate:
+            cmd += ["-DKCP_CANDIDATE"]
+        cmd += ["-c", frozen_bench / "peer.c", "-o", obj]
+        build_commands.append(list(map(str, cmd))); command(cmd)
+        objects = [obj]
+        if candidate:
+            candidate_obj = out / (name + "-candidate.o")
+            cmd = ["/usr/bin/cc", "-O2", "-Wall", "-Wextra", "-Werror", "-I", frozen,
+                   "-c", frozen_bench / candidate["source"], "-o", candidate_obj]
+            build_commands.append(list(map(str, cmd))); command(cmd)
+            objects.append(candidate_obj)
+        cmd = ["/usr/bin/cc", "-O2", "-I", frozen, *objects, frozen / "ikcp.c", "-lenet", "-o", binary]
+        build_commands.append(list(map(str, cmd))); command(cmd)
+        return binary
+    baseline = compile_peer("peer")
+    variants = {p: (baseline, p) for p in args.protocols}
+    for name in args.candidates:
+        variants[name] = (compile_peer(name, registry[name]), "kcp_candidate")
+    metadata = dict(schema_version=2, suite=SUITE, suite_sha256=source_hashes["benchmarks/network/suite.json"],
+                    kernel=platform.uname()._asdict(), count=args.count, interval_us=args.interval_us,
+                    repeats=args.repeats, jobs=args.jobs, profiles=profiles, protocols=list(variants),
+                    split=args.split if not args.profiles else "custom", random_loss="unseeded",
+                    candidates={name: registry[name] for name in args.candidates},
                     enet=command(["pkg-config", "--modversion", "libenet"]).strip(),
                     tc=command(["/sbin/tc", "-V"]).strip(),
                     compiler=command(["/usr/bin/cc", "--version"]).splitlines()[0],
                     commit=command(["git", "-C", ROOT, "rev-parse", "HEAD"]).strip(),
-                    source_sha256={s: hashlib.sha256((ROOT / s).read_bytes()).hexdigest() for s in sources})
+                    source_sha256=source_hashes, build_commands=build_commands)
     (out / "metadata.json").write_text(json.dumps(metadata, indent=2))
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [pool.submit(trial, binary, out, protocol, profile, repeat, args.count, 10000)
-                   for repeat in range(1, args.repeats + 1) for profile in args.profiles for protocol in args.protocols]
-        for future in concurrent.futures.as_completed(futures):
-            results.append(future.result())
-            (out / "results.json").write_text(json.dumps(results, indent=2))
+        futures = [pool.submit(trial, binary, peer_protocol, out, protocol, profile, repeat, args.count, args.interval_us)
+                   for repeat in range(1, args.repeats + 1) for profile in profiles
+                   for protocol, (binary, peer_protocol) in variants.items()]
+        try:
+            for future in concurrent.futures.as_completed(futures):
+                results.append(future.result())
+                (out / "results.json").write_text(json.dumps(results, indent=2))
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
     results.sort(key=lambda r: (r["profile"], r["protocol"], r["repeat"]))
     report(out, results, metadata)
+    from compare import compare
+    for candidate in args.candidates:
+        if "kcp" in variants:
+            (out / (candidate + "-comparison.json")).write_text(json.dumps(compare(results, "kcp", candidate), indent=2))
     print(out / "report.html", flush=True)
 
 if __name__ == "__main__":
