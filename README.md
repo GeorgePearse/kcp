@@ -18,7 +18,7 @@ KCP - A Fast and Reliable ARQ Protocol
 [7]: https://github.com/skywind3000/kcp/blob/master/LICENSE
 
 > English-first fork of [skywind3000/kcp](https://github.com/skywind3000/kcp).
-> The README below is upstream's English documentation; implementation and license are unchanged.
+> The README below is upstream's English documentation with a fork-specific alternatives section; implementation and license are unchanged.
 > [Original Chinese README](README.zh-CN.md) · [English protocol specification](protocol.txt)
 >
 > Performance comparisons below are upstream claims, not measurements of this fork.
@@ -31,6 +31,22 @@ KCP - A Fast and Reliable ARQ Protocol
 KCP is implemented purely as an algorithm; it does not handle sending or receiving packets. It is designed to be transport-agnostic. Users must define their underlying transmission logic (e.g., via UDP) and pass data to KCP through callbacks. Even timekeeping is left to the user; KCP requires the current clock value to be provided externally, making it completely free of internal system calls.
 
 The protocol consists of two source files: **ikcp.h and ikcp.c**. These files are lightweight and easy to integrate into your existing network stack. Whether you're building a P2P system or a UDP-based protocol that needs a robust ARQ (Automatic Repeat reQuest) mechanism, you can start using KCP by adding these files to your project and writing a few lines of integration code.
+
+
+# Alternatives to KCP
+
+These are different transport strategies to explore alongside KCP. They overlap in purpose, but are not API- or wire-compatible replacements. This is a learning list, not a performance ranking.
+
+| Alternative | What it offers | Useful comparison with KCP |
+| --- | --- | --- |
+| [ENet](https://github.com/lsalzman/enet) | A lightweight C library for reliable UDP networking. | A close starting point for comparing reliable UDP libraries and their integration models. |
+| [GameNetworkingSockets](https://github.com/ValveSoftware/GameNetworkingSockets) | Reliable and unreliable messages over UDP, fragmentation, encryption, and P2P/NAT traversal support. | A fuller game networking library with connection and security features beyond KCP's ARQ core. |
+| [QUIC](https://www.rfc-editor.org/rfc/rfc9000.html), e.g. [quiche](https://github.com/cloudflare/quiche) | A standardized, encrypted UDP transport with multiple independently ordered reliable byte streams. | Study stream multiplexing: loss on one stream need not block delivery on another. Applications must frame their own messages within streams. |
+| [SCTP / usrsctp](https://github.com/sctplab/usrsctp/blob/master/Manual.md) | Reliable messages, ordered or unordered delivery, multiple streams, and UDP encapsulation in a user-space implementation. | Study message boundaries and multiple delivery streams within one connection. |
+| [SRT](https://github.com/Haivision/srt) | UDP transport with retransmission, configurable latency, and encryption, designed especially for live audio/video. | Study the tradeoff between buffering, loss recovery, and delivery deadlines for media. |
+| [TCP](https://www.rfc-editor.org/rfc/rfc9293.html) | A reliable, ordered byte stream available through standard OS sockets. | A useful baseline: the OS handles transport, applications frame messages, and missing bytes delay later bytes on the same connection. |
+
+For a small learning exercise, compare KCP, ENet, and TCP with the same payloads, network delay, packet loss, and bandwidth limit. Measure delivery latency and bandwidth rather than assuming one is always faster.
 
 
 # Technical Specifications
