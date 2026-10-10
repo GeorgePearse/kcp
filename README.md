@@ -53,6 +53,8 @@ For a small learning exercise, compare KCP, ENet, and TCP with the same payloads
 The [sender/receiver benchmark](benchmarks/network/README.md) compares plain UDP, KCP with congestion control on/off, ENet, TCP, and registered experimental candidates using real processes and isolated Linux network namespaces. It generates an interactive report and preserves raw measurements. The [algorithm iteration workflow](benchmarks/network/ITERATING.md) keeps the workload and controls fixed while AI-assisted candidates are tested and recorded.
 
 
+The [video-payload pilot](benchmarks/video/README.md) sends actual H.264 and MJPEG segments through TCP, KCP and UDP, measuring complete video and playback deadlines. See the [video documentation](https://georgepearse.github.io/kcp/video-experiments/).
+
 # Technical Specifications
 
 While TCP is optimized for throughput—maximizing the amount of data transmitted per second (e.g., kilobits/sec)—KCP is designed to focus on latency and packet delivery time. By prioritizing how quickly individual packets travel from sender to receiver, KCP trades 10–20% more bandwidth overhead for 30–40% faster transmission speed compared to TCP.
