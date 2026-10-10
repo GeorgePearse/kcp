@@ -1,10 +1,10 @@
 KCP - A Fast and Reliable ARQ Protocol
 ======================================
 
-[![Powered][3]][1] 
+[![Powered][3]][1]
 [![GitHub license][6]][7]
 [![Backers on Open Collective](https://opencollective.com/kcp/backers/badge.svg)](#backers)
-[![Sponsors on Open Collective](https://opencollective.com/kcp/sponsors/badge.svg)](#sponsors) 
+ [![Sponsors on Open Collective](https://opencollective.com/kcp/sponsors/badge.svg)](#sponsors)
 
 [1]: https://github.com/skywind3000/kcp
 [2]: https://github.com/skywind3000/kcp/raw/master/kcp.svg
@@ -14,49 +14,68 @@ KCP - A Fast and Reliable ARQ Protocol
 [6]: https://img.shields.io/badge/license-MIT-blue.svg
 [7]: https://github.com/skywind3000/kcp/blob/master/LICENSE
 
-[README in English](https://github.com/skywind3000/kcp/blob/master/README.en.md) 
+> English-first fork of [skywind3000/kcp](https://github.com/skywind3000/kcp).
+> The README below is upstream's English documentation; implementation and license are unchanged.
+> [Original Chinese README](README.zh-CN.md) · [English protocol specification](protocol.txt)
+>
+> Performance comparisons below are upstream claims, not measurements of this fork.
+> Some linked upstream wiki pages and image content may be in Chinese.
 
-# 简介
+# Introduction
 
-KCP是一个快速可靠协议，能以比 TCP 浪费 10%-20% 的带宽的代价，换取平均延迟降低 30%-40%，且最大延迟降低三倍的传输效果。纯算法实现，并不负责底层协议（如UDP）的收发，需要使用者自己定义下层数据包的发送方式，以 callback的方式提供给 KCP。 连时钟都需要外部传递进来，内部不会有任何一次系统调用。
+**KCP** is a high-performance, reliable transport protocol designed to significantly reduce latency compared to traditional TCP. It can achieve a **30–40% reduction in average latency** and up to three times lower maximum delay, _costing 10–20% additional bandwidth overhead_.
 
-整个协议只有 ikcp.h, ikcp.c两个源文件，可以方便的集成到用户自己的协议栈中。也许你实现了一个P2P，或者某个基于 UDP的协议，而缺乏一套完善的ARQ可靠协议实现，那么简单的拷贝这两个文件到现有项目中，稍微编写两行代码，即可使用。
+KCP is implemented purely as an algorithm; it does not handle sending or receiving packets. It is designed to be transport-agnostic. Users must define their underlying transmission logic (e.g., via UDP) and pass data to KCP through callbacks. Even timekeeping is left to the user; KCP requires the current clock value to be provided externally, making it completely free of internal system calls.
 
-**注意：KCP 目前更新到 V2，增加了可插拔的流控算法机制，可以不改协议的情况下替换流控算法，老的 v1 足够稳定，我放到了 v1 这个 branch 里。**
+The protocol consists of two source files: **ikcp.h and ikcp.c**. These files are lightweight and easy to integrate into your existing network stack. Whether you're building a P2P system or a UDP-based protocol that needs a robust ARQ (Automatic Repeat reQuest) mechanism, you can start using KCP by adding these files to your project and writing a few lines of integration code.
 
 
-# 技术特性
+# Technical Specifications
 
-TCP是为流量设计的（每秒内可以传输多少KB的数据），讲究的是充分利用带宽。而 KCP是为流速设计的（单个数据包从一端发送到一端需要多少时间），以10%-20%带宽浪费的代价换取了比 TCP快30%-40%的传输速度。TCP信道是一条流速很慢，但每秒流量很大的大运河，而KCP是水流湍急的小激流。KCP有正常模式和快速模式两种，通过以下策略达到提高流速的结果：
+While TCP is optimized for throughput—maximizing the amount of data transmitted per second (e.g., kilobits/sec)—KCP is designed to focus on latency and packet delivery time. By prioritizing how quickly individual packets travel from sender to receiver, KCP trades 10–20% more bandwidth overhead for 30–40% faster transmission speed compared to TCP.
 
-#### RTO翻倍vs不翻倍：
+Think of TCP as a wide canal: it can carry a large volume of data, but the flow is relatively slow. In contrast, KCP is like a narrow, fast-moving stream—it sends smaller amounts of data more quickly, ensuring lower delay and faster responsiveness.
 
-   TCP超时计算是RTOx2，这样连续丢三次包就变成RTOx8了，十分恐怖，而KCP启动快速模式后不x2，只是x1.5（实验证明1.5这个值相对比较好），提高了传输速度。
+KCP supports both normal mode and fast mode, each optimizing performance based on different needs. Its increased flow rate is achieved through several key strategies:
 
-#### 选择性重传 vs 全部重传：
+#### RTO Doubled vs Not Doubled:
 
-   TCP丢包时会全部重传从丢的那个包开始以后的数据，KCP是选择性重传，只重传真正丢失的数据包。
+In TCP, retransmission timeout (RTO) increases exponentially—each failure doubles the timeout interval (RTO × 2). This means three consecutive losses can escalate to RTO × 8, leading to serious transmission delays.
+KCP, in contrast, uses a more responsive approach in fast mode: the RTO increases by a factor of 1.5x (based on empirical results), significantly improving recovery speed and reducing delay after packet loss.
 
-#### 快速重传：
+#### Selective Retransmission vs Full Retransmission:
 
-   发送端发送了1,2,3,4,5几个包，然后收到远端的ACK: 1, 3, 4, 5，当收到ACK3时，KCP知道2被跳过1次，收到ACK4时，知道2被跳过了2次，此时可以认为2号丢失，不用等超时，直接重传2号包，大大改善了丢包时的传输速度。
+TCP often retransmits all subsequent data after a lost packet, which can lead to excessive redundancy.
+KCP implements selective retransmission, ensuring that only the actually lost packets are resent, minimizing unnecessary data transmission and improving efficiency.
 
-#### 延迟ACK vs 非延迟ACK：
+#### Fast Retransmission:
 
-   TCP为了充分利用带宽，延迟发送ACK（NODELAY都没用），这样超时计算会算出较大 RTT时间，延长了丢包时的判断过程。KCP的ACK是否延迟发送可以调节。
+When the sender transmits packets 1 through 5 and receives ACKs for 1, 3, 4, and 5, KCP deduces from missing ACK2 that packet 2 has likely been lost. After receiving multiple out-of-order ACKs, KCP can immediately trigger a fast retransmit of packet 2—without waiting for a timeout—drastically reducing retransmission latency under packet loss.
+
+#### Delayed ACK vs Non-delayed ACK:
+
+TCP often delays ACKs to optimize throughput, which can unintentionally inflate RTT calculations and delay loss detection—even with `NODELAY` settings.
+KCP provides configurable ACK behavior, allowing ACKs to be sent immediately when needed, enhancing responsiveness in latency-sensitive applications.
 
 #### UNA vs ACK+UNA：
 
-   ARQ模型响应有两种，UNA（此编号前所有包已收到，如TCP）和ACK（该编号包已收到），光用UNA将导致全部重传，光用ACK则丢失成本太高，以往协议都是二选其一，而 KCP协议中，除去单独的 ACK包外，所有包都有UNA信息。
+ARQ protocols typically use either:
 
-#### 非退让流控：
+    UNA (Unacknowledged Acknowledgment): Confirms all packets before a given sequence number (e.g., TCP).
 
-   KCP正常模式同TCP一样使用公平退让法则，即发送窗口大小由：发送缓存大小、接收端剩余接收缓存大小、丢包退让及慢启动这四要素决定。但传送及时性要求很高的小数据时，可选择通过配置跳过后两步，仅用前两项来控制发送频率。以牺牲部分公平性及带宽利用率之代价，换取了开着BT都能流畅传输的效果。
+    ACK: Confirms receipt of a specific packet.
+
+Each has tradeoffs: UNA can lead to full retransmissions, and standalone ACKs create overhead during loss.
+KCP combines both—each control message contains UNA info, and a dedicated ACK frame is used when necessary. This hybrid model increases reliability and precision without excess cost.
+
+#### Non-concessional Flow Control:
+By default, KCP follows TCP's fair flow control—factoring in send buffer size, receiver buffer, congestion control, and slow-start.
+However, for latency-critical small data, KCP can be configured to bypass congestion and slow-start, relying only on buffer sizes. This allows smooth transmission even under heavy network load (e.g., when BitTorrent is active), sacrificing some fairness for timeliness.
 
 
-# 快速安装
+# Quick Install
 
-您可以使用[vcpkg](https://github.com/Microsoft/vcpkg)库管理器下载并安装kcp:
+You can download and install kcp using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
 
     git clone https://github.com/Microsoft/vcpkg.git
     cd vcpkg
@@ -64,162 +83,140 @@ TCP是为流量设计的（每秒内可以传输多少KB的数据），讲究的
     ./vcpkg integrate install
     ./vcpkg install kcp
 
-vcpkg中的kcp库由Microsoft团队成员和社区贡献者保持最新状态。如果版本过时，请在vcpkg存储库上[创建issue或提出PR](https://github.com/Microsoft/vcpkg)。
+Microsoft team members and community contributors keep the kcp port in vcpkg up to date. If the version is outdated, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
 
-# 基本使用
+# Basic Usage
 
-1. 创建 KCP对象：
+1. Create KCP object:
 
    ```cpp
-   // 初始化 kcp对象，conv为一个表示会话编号的整数，和tcp的 conv一样，通信双
-   // 方需保证 conv相同，相互的数据包才能够被认可，user是一个给回调函数的指针
+   // Initialize the kcp object, conv is an integer that represents the session number,
+   // same as the conv of tcp, both communication sides shall ensure the same conv,
+   // so that mutual data packets can be recognized, user is a pointer which will be
+   // passed to the callback function.
    ikcpcb *kcp = ikcp_create(conv, user);
    ```
 
-2. 设置回调函数：
+2. Set the callback function:
 
    ```cpp
-   // KCP的下层协议输出函数，KCP需要发送数据时会调用它
-   // buf/len 表示缓存和长度
-   // user指针为 kcp对象创建时传入的值，用于区别多个 KCP对象
+   // KCP lower layer protocol output function, which will be called by KCP when it
+   // needs to send data, buf/len represents the buffer and data length.
+   // user refers to the incoming value at the time the kcp object is created to
+   // distinguish between multiple KCP objects
    int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
    {
      ....
    }
-   // 设置回调函数
+   // Set the callback function
    kcp->output = udp_output;
    ```
 
-3. 循环调用 update：
+3. Call update in an interval:
 
    ```cpp
-   // 以一定频率调用 ikcp_update来更新 kcp状态，并且传入当前时钟（毫秒单位）
-   // 如 10ms调用一次，或用 ikcp_check确定下次调用 update的时间不必每次调用
+   // Call ikcp_update at a certain frequency to update the kcp state, and pass in
+   // the current clock (in milliseconds). If the call is executed every 10ms, or
+   // ikcp_check is used to determine time of the next call for update, no need to
+   // call every time;
    ikcp_update(kcp, millisec);
    ```
 
-4. 输入一个下层数据包：
+4. Input a lower layer data packet:
 
    ```cpp
-   // 收到一个下层数据包（比如UDP包）时需要调用：
+   // Need to call when a lower layer data packet (such as UDP packet)is received:
    ikcp_input(kcp, received_udp_packet, received_udp_size);
    ```
-   处理了下层协议的输出/输入后 KCP协议就可以正常工作了，使用 ikcp_send 来向
-   远端发送数据。而另一端使用 ikcp_recv(kcp, ptr, size)来接收数据。
+
+   After processing the output/input of the lower layer protocols, the KCP protocol can work normally. ikcp_send is used to send data to the remote end, while the other end uses ikcp_recv (kcp, ptr, size) to receive the data.
 
 
-# 协议配置
+# Protocol Configuration
 
-协议默认模式是一个标准的 ARQ，需要通过配置打开各项加速开关：
+The protocol default mode is a standard ARQ, and various acceleration switches can be enabled by configuration:
 
-1. 工作模式：
+1. Working Mode:
    ```cpp
    int ikcp_nodelay(ikcpcb *kcp, int nodelay, int interval, int resend, int nc)
    ```
 
-   - nodelay ：是否启用 nodelay模式，0不启用；1启用。
-   - interval ：协议内部工作的 interval，单位毫秒，比如 10ms或者 20ms
-   - resend ：快速重传模式，默认0关闭，可以设置2（2次ACK跨越将会直接重传）
-   - nc ：是否关闭流控，默认是0代表不关闭，1代表关闭。
-   - 普通模式： ikcp_nodelay(kcp, 0, 40, 0, 0);
-   - 极速模式： ikcp_nodelay(kcp, 1, 10, 2, 1);
+   - `nodelay`: Whether nodelay mode is enabled, 0 is not enabled; 1 enabled.
+   - `interval` ：P rotocol internal work interval, in milliseconds, such as 10 ms or 20 ms.
+   - `resend`  ：Fast retransmission mode, 0 represents off by default, 2 can be set (2 ACK spans will result in direct retransmission)
+   - `nc` ： Whether to turn off flow control, 0 represents “Do not turn off” by default, 1 represents “Turn off”.
+   - Normal Mode: ikcp_nodelay(kcp, 0, 40, 0, 0);
+   - Turbo Mode： ikcp_nodelay(kcp, 1, 10, 2, 1);
 
-2. 最大窗口：
+2. Window Size:
    ```cpp
    int ikcp_wndsize(ikcpcb *kcp, int sndwnd, int rcvwnd);
    ```
-   该调用将会设置协议的最大发送窗口和最大接收窗口大小，默认为32. 这个可以理解为 TCP的 SND_BUF 和 RCV_BUF，只不过单位不一样 SND/RCV_BUF 单位是字节，这个单位是包。
+   By default, the call will set the maximum send window and maximum receive window size of the procotol, 32. This can be understood as SND_BUF and RCV_BUF of TCP, but the unit is not the same, SND / RCV_BUF unit is byte, while this unit is the packet.
 
-3. 最大传输单元：
+3. Maximum Transmission Unit:
 
-   纯算法协议并不负责探测 MTU，默认 mtu是1400字节，可以使用ikcp_setmtu来设置该值。该值将会影响数据包归并及分片时候的最大传输单元。
+   The algorithm protocol is not responsible for MTU detection. The default MTU is 1400 bytes, which can be set using ikcp_setmtu. The value will affect the maximum transmission unit upon data packet merging and fragmentation.
 
-4. 最小RTO：
+4. Minimum RTO:
 
-   不管是 TCP还是 KCP计算 RTO时都有最小 RTO的限制，即便计算出来RTO为40ms，由于默认的 RTO是100ms，协议只有在100ms后才能检测到丢包，快速模式下为30ms，可以手动更改该值：
+   No matter TCP or KCP, they have the limitation for the minimum RTO when calculating the RTO, even if the calculated RTO is 40ms, as the default RTO is 100ms, the protocol can only detect packet loss after 100ms, which is 30ms in the fast mode, and the value can be manually changed:
    ```cpp
    kcp->rx_minrto = 10;
    ```
 
 
-# 文档索引
 
-协议的使用和配置都是很简单的，大部分情况看完上面的内容基本可以使用了。如果你需要进一步进行精细的控制，比如改变 KCP的内存分配器，或者你需要更有效的大规模调度 KCP链接（比如 3500个以上），或者如何更好的同 TCP结合，那么可以继续延伸阅读：
+# Document Indexing
 
-- [Wiki Home](https://github.com/skywind3000/kcp/wiki)
-- [KCP 最佳实践](https://github.com/skywind3000/kcp/wiki/KCP-Best-Practice)
-- [同现有TCP服务器集成](https://github.com/skywind3000/kcp/wiki/Cooperate-With-Tcp-Server)
-- [传输数据加密](https://github.com/skywind3000/kcp/wiki/Network-Encryption)
-- [应用层流量控制](https://github.com/skywind3000/kcp/wiki/Flow-Control-for-Users)
-- [性能评测](https://github.com/skywind3000/kcp/wiki/KCP-Benchmark)
+Both the use and configuration of the protocol is straightforward, in most cases, after you read the above contents, you can use it. If you need further fine control, such as changing the KCP memory allocator, or if you need more efficient large-scale scheduling of KCP links (such as more than 3,500 links), or to better combine with TCP, you can continue the extensive reading:
+
+- [KCP Best Practice](https://github.com/skywind3000/kcp/wiki/KCP-Best-Practice-EN)
+- [Integration with the Existing TCP Server](https://github.com/skywind3000/kcp/wiki/KCP-Best-Practice-EN)
+- [Benchmarks](https://github.com/skywind3000/kcp/wiki/KCP-Benchmark)
 
 
-# 开源案例
+# Related Applications
 
-- [kcptun](https://github.com/xtaci/kcptun): 基于 kcp-go做的高速远程端口转发(隧道) ，配合ssh -D，可以比 shadowsocks 更流畅的看在线视频。
-- [dog-tunnel](https://github.com/vzex/dog-tunnel): GO开发的网络隧道，使用 KCP极大的改进了传输速度，并移植了一份 GO版本 KCP
-- [v2ray](https://www.v2ray.com): 著名代理软件，Shadowsocks 代替者，1.17后集成了 kcp协议，使用UDP传输，无数据包特征。
-- [HP-Socket](https://github.com/ldcsaa/HP-Socket): 高性能网络通信框架 HP-Socket。
-- [frp](https://github.com/fatedier/frp): 高性能内网穿透的反向代理软件，可将将内网服务暴露映射到外网服务器。
-- [asio-kcp](https://github.com/libinzhangyuan/asio_kcp): 使用 KCP的完整 UDP网络库，完整实现了基于 UDP的链接状态管理，会话控制，KCP协议调度等
-- [kcp-java](https://github.com/hkspirt/kcp-java): Java版本 KCP协议实现。
-- [kcp-netty](https://github.com/szhnet/kcp-netty): kcp的Java语言实现，基于netty。
-- [java-kcp](https://github.com/l42111996/java-Kcp): JAVA版本KCP,基于netty实现(包含fec功能)
-- [kcp.kt](https://github.com/jokelbaf/kcp.kt): 纯 Kotlin 多平台（Kotlin Multiplatform）实现的 KCP 协议，支持 JVM、Linux、Windows、macOS 和 iOS 等目标平台。
-- [csharp-kcp](https://github.com/l42111996/csharp-kcp): csharp版本KCP,基于dotNetty实现(包含fec功能)
-- [kcp-cpp](https://github.com/Unit-X/kcp-cpp): KCP 的多平台（Windows、MacOS、Linux）C++ 实现作为应用程序中的简单库。包含适用于所有平台的套接字处理和辅助函数。
-- [kcp-perl](https://github.com/Homqyy/kcp-perl): kcp的Perl实现，其是面向对象的，Perl-Like的。
-- [kcp-go](https://github.com/xtaci/kcp-go): 高安全性的kcp的 GO语言实现，包含 UDP会话管理的简单实现，可以作为后续开发的基础库。 
-- [kcp-csharp](https://github.com/limpo1989/kcp-csharp): kcp的 csharp移植，同时包含一份回话管理，可以连接上面kcp-go的服务端。
-- [kcp-csharp](https://github.com/KumoKyaku/KCP): 新版本 Kcp的 csharp移植。线程安全，运行时无alloc，对gc无压力。
-- [KcpTransport](https://github.com/Cysharp/KcpTransport): kcp的csharp移植，实现了 Syn Cookie 握手、连接管理、不可靠通信、KeepAlive，未来还将支持加密。
-- [Kcp-CSharp](https://github.com/Molth/Kcp-CSharp): kcp的csharp移植，非托管包装器。
+- [kcptun](https://github.com/xtaci/kcptun): High-speed remote port forwarding based (tunnel) on kcp-go, with ssh-D, it allows smoother online video viewing than finalspeed.
+- [dog-tunnel](https://github.com/vzex/dog-tunnel): Network tunnel developed by GO, using KCP to greatly improve the transmission speed, and migrated a GO version of the KCP.
+- [v2ray](https://www.v2ray.com)：Well-known proxy software, Shadowsocks replacement, integrated with kcp protocol after 1.17, using UDP transmission, no data packet features.
+- [HP-Socket](https://github.com/ldcsaa/HP-Socket): High Performance TCP/UDP/HTTP Communication Component.
+- [frp](https://github.com/fatedier/frp): A fast reverse proxy to help you expose a local server behind a NAT or firewall to the internet.
+- [asio-kcp](https://github.com/libinzhangyuan/asio_kcp): Use the complete UDP network library of KCP, complete implementation of UDP-based link state management, session control and KCP protocol scheduling, etc.
+- [kcp-cpp](https://github.com/Unit-X/kcp-cpp): Multi-platform (Windows, MacOS, Linux) C++ implementation of KCP as a simple library in your application. Contains socket handling and helper functions for all platforms.
+- [kcp-perl](https://github.com/Homqyy/kcp-perl): Perl extensions for kcp. It's OOP and Perl-Like.
+- [kcp-java](https://github.com/hkspirt/kcp-java)：Implementation of Java version of KCP protocol.
+- [kcp-netty](https://github.com/szhnet/kcp-netty)：Java implementation of KCP based on Netty.
+- [java-kcp](https://github.com/l42111996/java-Kcp): JAVA version KCP, based on netty implementation (including fec function)
+- [kcp.kt](https://github.com/jokelbaf/kcp.kt): A pure-Kotlin Multiplatform implementation of KCP. Supports JVM, Linux, Windows, macOS and iOS targets.
+- [csharp-kcp](https://github.com/l42111996/csharp-kcp): csharp version KCP, based on dotNetty implementation (including fec function)
+- [kcp-go](https://github.com/xtaci/kcp-go): High-security GO language implementation of kcp, including simple implementation of UDP session management, as a base library for subsequent development.
+- [kcp-csharp](https://github.com/limpo1989/kcp-csharp): The csharp migration of kcp, containing the session management, which can access the above kcp-go server.
+- [KcpTransport](https://github.com/Cysharp/KcpTransport): KcpTransport is built on top of KCP ported to Pure C#, with implementations of Syn Cookie handshake, connection management, Unreliable communication, and KeepAlive. In the future, encryption will also be supported.
+- [Kcp-CSharp](https://github.com/Molth/Kcp-CSharp): a pure C# KCP instance callback(delegate) wrapper for (Unity/Godot/.NET)
 - [kcp2k](https://github.com/vis2k/kcp2k/): Line-by-line translation to C#, with optional Server/Client on top.
-- [KcpSharpN](https://github.com/new1271/KcpSharpN): 将原始 C 语言源代码复刻到 Csharp 的移植，包含一个简易的协定包装器与原始的 KCP 协定呼叫
-- [kcp-rs](https://github.com/en/kcp-rs): KCP的 rust移植
-- [kcp-rust](https://github.com/Matrix-Zhang/kcp)：新版本 KCP的 rust 移植
-- [tokio-kcp](https://github.com/Matrix-Zhang/tokio_kcp)：rust tokio 的 kcp 集成
-- [kcp-rust-native](https://github.com/b23r0/kcp-rust-native)：rust 的 kcp bindings
-- [lua-kcp](https://github.com/linxiaolong/lua-kcp): KCP的 Lua扩展，用于 Lua服务器
-- [node-kcp](https://github.com/leenjewel/node-kcp): node-js 的 KCP 接口  
-- [nysocks](https://github.com/oyyd/nysocks): 基于libuv实现的[node-addon](https://nodejs.org/api/addons.html)，提供nodejs版本的代理服务，客户端接入支持SOCKS5和ss两种协议
-- [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android): Shadowsocks for android 集成了 kcptun 使用 kcp协议加速 shadowsocks，效果不错
-- [kcpuv](https://github.com/elisaday/kcpuv): 使用 libuv开发的kcpuv库，目前还在 Demo阶段
-- [Lantern](https://getlantern.org/)：更好的 VPN，Github 50000 星，使用 kcpgo 加速
-- [rpcx](https://github.com/smallnest/rpcx) ：RPC 框架，1000+ 星，使用 kcpgo 加速 RPC
-- [xkcptun](https://github.com/liudf0716/xkcptun): c语言实现的kcptun，主要用于[OpenWrt](https://github.com/openwrt/openwrt), [LEDE](https://github.com/lede-project/source)开发的路由器项目上
-- [et-frame](https://github.com/egametang/ET): C#前后端框架(前端unity3d)，统一用C#开发游戏，实现了前后端kcp协议
-- [yasio](https://github.com/yasio/yasio): 一个跨平台专注于任意客户端程序的异步socket库, 易于使用，相同的API操作KCP/TCP/UDP, 性能测试结果: [benchmark-pump](https://github.com/yasio/yasio/blob/master/benchmark.md).
-- [gouxp](https://github.com/shaoyuan1943/gouxp): 用Go实现基于回调方式的KCP开发包，包含加解密和FEC支持，简单易用。  
-- [skcp](https://github.com/xboss/skcp): 基于libev实现的库，具备传输加密及基本的连接管理能力。
-- [pykcp](https://github.com/enkiller/pykcp): Python 版本的 KCP 实现
-- [php-ext-kcp](https://github.com/wpjscc/php-ext-kcp): php 的 KCP 扩展
-- [asio-kcp(new)](https://github.com/sniper00/asio-kcp): c++的asio/kcp支持，支持asio协程等现代c++异步模型
+- [KcpSharpN](https://github.com/new1271/KcpSharpN): The csharp version of KCP, translated from the original C code, includes a simple wrapper of the protocol for easy use, but also allows calling the functions of the KCP protocol directly (just like C code)
+- [kcp-rs](https://github.com/en/kcp-rs): The rust migration of KCP
+- [kcp-rust-native](https://github.com/b23r0/kcp-rust-native)：KCP bindings for Rust
+- [lua-kcp](https://github.com/linxiaolong/lua-kcp): Lua extension of KCP, applicable for Lua server
+- [node-kcp](https://github.com/leenjewel/node-kcp): KCP interface for node-js
+- [nysocks](https://github.com/oyyd/nysocks): Nysocks provides proxy services base on libuv and kcp for nodejs users. Both SOCKS5 and ss protocols are supported in the client.
+- [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android): Shadowsocks for android has integrated kcptun using kcp protocol to accelerate shadowsocks, with good results
+- [kcpuv](https://github.com/elisaday/kcpuv): The kcpuv library developed with libuv, currently still in the early alpha phase.
+- [xkcptun](https://github.com/liudf0716/xkcptun): C language implementation of kcptun, embedded-friendly for [LEDE](https://github.com/lede-project/source) and [OpenWrt](https://github.com/openwrt/openwrt) projects.
+- [yasio](https://github.com/yasio/yasio): A cross-platform asynchronous socket library focus on any client application with kcp support, easy to use, API same with UDP and TCP, see [benchmark-pump](https://github.com/yasio/yasio/blob/master/benchmark.md).
+- [gouxp](https://github.com/shaoyuan1943/gouxp): Implementing a callback-based KCP development package with Go, with decryption and FEC support, is easy to use.
+- [kcp.py](https://github.com/RealistikDash/kcp.py): Python bindings and networking with an emphasis on dev friendliness.
+- [pykcp](https://github.com/enkiller/pykcp): KCP implementation for Python version.
+- [php-ext-kcp](https://github.com/wpjscc/php-ext-kcp): php extension for KCP.
+- [asio-kcp(new)](https://github.com/sniper00/asio-kcp): KCP implementation for C++/Asio, with Modern C++/Asio async features, such as coroutine.
 
-# 商业案例
+# Protocol Comparison
 
-- [原神](https://ys.mihoyo.com/)：米哈游的《原神》使用 KCP 降低游戏消息的传输耗时，提升操作的体验。
-- [SpatialOS](https://improbable.io/spatialOS): 大型多人分布式游戏服务端引擎，BigWorld 的后继者，使用 KCP 加速数据传输。
-- [西山居](https://www.xishanju.com/)：使用 KCP 进行游戏数据加速。
-- [CC](http://cc.163.com/)：网易 CC 使用 kcp 加速视频推流，有效提高流畅性
-- [BOBO](http://bobo.163.com/)：网易 BOBO 使用 kcp 加速主播推流
-- [UU](https://uu.163.com)：网易 UU 加速器使用 KCP/KCPTUN 经行远程传输加速。
-- [阿里云](https://cn.aliyun.com/)：阿里云的视频传输加速服务 GRTN 使用 KCP 进行音视频数据传输优化，动态加速产品也使用 KCP。
-- [云帆加速](http://www.yfcloud.com/)：使用 KCP 加速文件传输和视频推流，优化了台湾主播推流的流畅度。
-- [明日帝国](https://www.taptap.com/app/50664)：Game K17 的 《明日帝国》 （Google Play），使用 KCP 加速游戏消息，让全球玩家流畅联网
-- [仙灵大作战](https://www.taptap.com/app/27242)：4399 的 MOBA游戏，使用 KCP 优化游戏同步
+If the network is never congested, KCP/TCP performance is similar; but the network itself is not reliable, and packet loss and jitter may be inevitable (otherwise why there are various reliable protocols). Compared in the intranet environment which is almost ideal, they have similar performance, but on the public Internet, under 3G / 4G network situation, or using the intranet packet loss simulation, the gap is obvious. The public network has an average of nearly 10% packet loss during peak times, which is even worse in wifi / 3g / 4g network, all of which will cause transmission congestion.
 
-相关阅读：[《原神》也在使用 KCP 加速游戏消息](https://skywind.me/blog/archives/2706)
-
-KCP 成功的运行在多个用户规模上亿的项目上，为他们提供了更加灵敏和丝滑网络体验。
-
-欢迎告知更多案例
-
-# 协议比较
-
-如果网络永远不卡，那 KCP/TCP 表现类似，但是网络本身就是不可靠的，丢包和抖动无法避免（否则还要各种可靠协议干嘛）。在内网这种几乎理想的环境里直接比较，大家都差不多，但是放到公网上，放到3G/4G网络情况下，或者使用内网丢包模拟，差距就很明显了。公网在高峰期有平均接近10%的丢包，wifi/3g/4g下更糟糕，这些都会让传输变卡。
-
-感谢 [asio-kcp](https://github.com/libinzhangyuan/asio_kcp) 的作者 [zhangyuan](https://github.com/libinzhangyuan) 对 KCP 与 enet, udt做过的一次横向评测，结论如下：
+Thanks to [zhangyuan](https://github.com/libinzhangyuan) the author of [asio-kcp](https://github.com/libinzhangyuan/asio_kcp) for the horizontal evaluation on KCP, enet and udt, and the conclusions are as follows:
 
 - ASIO-KCP **has good performace in wifi and phone network(3G, 4G)**.
 - The kcp is the **first choice for realtime pvp game**.
@@ -227,65 +224,32 @@ KCP 成功的运行在多个用户规模上亿的项目上，为他们提供了�
 - The enet is a good choice if your game allow 2 second lag.
 - **UDT is a bad idea**. It always sink into badly situation of more than serval seconds lag. And the recovery is not expected.
 - enet has the problem of lack of doc. And it has lots of functions that you may intrest.
-- kcp's doc is chinese. Good thing is the function detail which is written in code is english. And you can use asio_kcp which is a good wrap.
+- kcp's doc is in both chinese and english. Good thing is the function detail which is writen in code is english. And you can use asio_kcp which is a good wrap.
 - The kcp is a simple thing. You will write more code if you want more feature.
 - UDT has a perfect doc. UDT may has more bug than others as I feeling.
 
-具体见：[横向比较](https://github.com/libinzhangyuan/reliable_udp_bench_mark) 和 [评测数据](https://github.com/skywind3000/kcp/wiki/KCP-Benchmark)，为犹豫选择的人提供了更多指引。
+For specifics please refer to: [Reliable Udp Benchmark](https://github.com/libinzhangyuan/reliable_udp_bench_mark) and [KCP-Benchmark](https://github.com/skywind3000/kcp/wiki/KCP-Benchmark), for more guidance to the hesitant users.
 
-大型多人游戏服务端引擎 [SpatialOS](https://improbable.io/spatialOS) 在集成 KCP 协议后做了同 TCP/RakNet 的评测：
+MMO Engine [SpatialOS](https://improbable.io/spatialOS) has a benchmark report on KCP/TCP/RakNet:
 
-![](https://github.com/skywind3000/kcp/raw/master/images/spatialos-50.png)
+![](images/spatialos-50.png)
 
-对比了在服务端刷新率为 60 Hz 同时维护 50 个角色时的响应时间，详细对比报告见：
+for more details, please see the report itself:
 
 - [Kcp a new low latency secure network stack](https://improbable.io/blog/kcp-a-new-low-latency-secure-network-stack)
 
+# KCP is used by
 
-# 关于协议
+See [Success Stories](https://github.com/skywind3000/kcp/wiki/Success-Stories).
 
-近年来，网络游戏和各类社交网络都在成几何倍数的增长，不管网络游戏还是各类互动社交网络，交互性和复杂度都在迅速提高，都需要在极短的时间内将数据同时投递给大量用户，因此传输技术自然变为未来制约发展的一个重要因素，而开源界里各种著名的传输协议，如 raknet/enet 之类，一发布都是整套协议栈一起发布，这种形式是不利于多样化的，我的项目只能选择用或者不用你，很难选择 “部分用你”，然而你一套协议栈设计的再好，是非常难以满足不同角度的各种需求的。
+# Donation
 
-因此 KCP 的方式是把协议栈 “拆开”，让大家可以根据项目需求进行灵活的调整和组装，你可以下面加一层 reed solomon 的纠删码做 FEC，上面加一层类 RC4/Salsa20 做流加密，握手处再设计一套非对称密钥交换，底层 UDP 传输层再做一套动态路由系统，同时探测多条路径，选最好路径进行传输。这些不同的 “协议单元” 可以像搭建积木一般根据需要自由组合，保证 “简单性” 和 “可拆分性”，这样才能灵活适配多变的业务需求，哪个模块不好，换了就是。
+![Donate to the upstream project with Alipay](https://raw.githubusercontent.com/skywind3000/kcp/master/images/donation.png)
 
-未来传输方面的解决方案必然是根据使用场景深度定制的，因此给大家一个可以自由组合的 “协议单元” ，方便大家集成在自己的协议栈中。
-
-For more information, please see the [Success Stories](https://github.com/skywind3000/kcp/wiki/Success-Stories).
-
-
-# 关于作者
-
-作者：林伟 (skywind3000)
-
-欢迎关注我的：[个人博客](https://skywind.me/blog) 和 [推特](https://x.com/skywind3000)。
-
-我在多年的开发经历中，一直都喜欢研究解决程序中的一些瓶颈问题，早年喜欢游戏开发，照着《VGA编程》来做游戏图形，读 Michael Abrash 的《图形程序开发人员指南》做软渲染器，爱好摆弄一些能够榨干 CPU 能够运行更快的代码，参加工作后，兴趣转移到服务端和网络相关的技术。
-
-2007 年时做了几个传统游戏后开始研究快速动作游戏的同步问题，期间写过不少文章，算是国内比较早研究同步问题的人，然而发现不管怎么解决同步都需要在网络传输方面有所突破，后来离开游戏转行互联网后也发现不少领域有这方面的需求，于是开始花时间在网络传输这个领域上，尝试基于 UDP 实现一些保守的可靠协议，仿照 BSD Lite 4.4 的代码实现一些类 TCP 协议，觉得比较有意思，又接着实现一些 P2P 和动态路由网相关的玩具。KCP 协议诞生于 2011 年，基本算是自己传输方面做的几个玩具中的一个。
-
-Kcptun 的作者 xtaci 是我的大学同学，我俩都是学通信的，经常在一起研究如何进行传输优化。
-
-# 欢迎捐赠
-
-![欢迎使用支付宝对该项目进行捐赠](images/donation.png)
-
-欢迎使用支付宝手扫描上面的二维码，对该项目进行捐赠。捐赠款项将用于持续优化 KCP协议以及完善文档。
-
-感谢：明明、星仔、进、帆、颁钊、斌铨、晓丹、余争、虎、晟敢、徐玮、王川、赵刚强、胡知锋、万新朝、何新超、刘旸、侯宪辉、吴佩仪、华斌、如涛、胡坚。。。（早先的名单实在不好意思没记录下来）等同学的捐助与支持。
+Donation is welcome by using alipay, the money will be used to improve the protocol and documentation.
 
 
-欢迎关注
-
-KCP交流群：364933586（QQ群号），KCP集成，调优，网络传输以及相关技术讨论
-
-Gitter 群：https://gitter.im/skywind3000/KCP
-
+twitter: https://twitter.com/skywind3000
 blog: http://www.skywind.me
 
-
-
-## Contributors
-
-This project exists thanks to all the people who contribute. 
-<a href="https://github.com/skywind3000/kcp/graphs/contributors"><img src="https://opencollective.com/kcp/contributors.svg?width=890&button=false" /></a>
-
+zhihu: https://www.zhihu.com/people/skywind3000
