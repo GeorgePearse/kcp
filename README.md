@@ -1,6 +1,8 @@
 > [!WARNING]
 > This is a slop fork for me to learn about different transport strategies.
 
+[**Transport Lab documentation**](https://georgepearse.github.io/kcp/) — transport fundamentals, benchmark results, GPU networking and RDMA hardware.
+
 KCP - A Fast and Reliable ARQ Protocol
 ======================================
 

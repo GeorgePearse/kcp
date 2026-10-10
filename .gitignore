@@ -69,3 +69,6 @@ nul
 
 
 !/justfile
+
+/site/
+/.venv-docs/
