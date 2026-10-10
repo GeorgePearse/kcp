@@ -16,7 +16,7 @@
         <link rel="prev" href="../iteration/">
       
       
-        <link rel="next" href="../gpu-transport/">
+        <link rel="next" href="../video-payload-pilot/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Video delivery experiments - Transport Lab</title>
+        <title>Stable video capacity - Transport Lab</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#how-much-video-can-the-network-carry" class="md-skip">
+        <a href="#stable-video-capacity-on-bad-networks" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Video delivery experiments
+              Stable video capacity
             
           </span>
         </div>
@@ -436,7 +436,7 @@
   <span class="md-ellipsis">
     
   
-    Video delivery experiments
+    Stable video capacity
   
 
     
@@ -454,7 +454,7 @@
   <span class="md-ellipsis">
     
   
-    Video delivery experiments
+    Stable video capacity
   
 
     
@@ -480,10 +480,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#workload" class="md-nav__link">
+  <a href="#what-stable-means" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Workload
+        What “stable” means
       
     </span>
   </a>
@@ -491,10 +491,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#network-experiment" class="md-nav__link">
+  <a href="#find-a-capacity-bound" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Network experiment
+        Find a capacity bound
       
     </span>
   </a>
@@ -502,10 +502,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-this-tells-us-about-the-edge" class="md-nav__link">
+  <a href="#the-bad-networks" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What this tells us about the edge
+        The bad networks
       
     </span>
   </a>
@@ -513,10 +513,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-concrete-loss-comparison" class="md-nav__link">
+  <a href="#video-and-transport-contract" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A concrete loss comparison
+        Video and transport contract
       
     </span>
   </a>
@@ -524,10 +524,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#reproduce-and-inspect" class="md-nav__link">
+  <a href="#measured-capacity-bounds" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Reproduce and inspect
+        Measured capacity bounds
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evidence-and-reproduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evidence and reproduction
       
     </span>
   </a>
@@ -538,6 +549,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../video-payload-pilot/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Short video payload pilot
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -719,10 +758,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#workload" class="md-nav__link">
+  <a href="#what-stable-means" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Workload
+        What “stable” means
       
     </span>
   </a>
@@ -730,10 +769,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#network-experiment" class="md-nav__link">
+  <a href="#find-a-capacity-bound" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Network experiment
+        Find a capacity bound
       
     </span>
   </a>
@@ -741,10 +780,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-this-tells-us-about-the-edge" class="md-nav__link">
+  <a href="#the-bad-networks" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What this tells us about the edge
+        The bad networks
       
     </span>
   </a>
@@ -752,10 +791,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#a-concrete-loss-comparison" class="md-nav__link">
+  <a href="#video-and-transport-contract" class="md-nav__link">
     <span class="md-ellipsis">
       
-        A concrete loss comparison
+        Video and transport contract
       
     </span>
   </a>
@@ -763,10 +802,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#reproduce-and-inspect" class="md-nav__link">
+  <a href="#measured-capacity-bounds" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Reproduce and inspect
+        Measured capacity bounds
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evidence-and-reproduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evidence and reproduction
       
     </span>
   </a>
@@ -793,74 +843,101 @@
   
 
 
-<h1 id="how-much-video-can-the-network-carry">How much video can the network carry?<a class="headerlink" href="#how-much-video-can-the-network-carry" title="Permanent link">&para;</a></h1>
-<p>This pilot sends <strong>actual encoded video bytes</strong> through the same kind of isolated Linux sender/router/receiver network used by the small-message benchmark. It measures how much complete video arrives, and how much arrives soon enough for a chosen playback deadline.</p>
-<p><a class="md-button md-button--primary" href="../reports/video-v1.html">Explore the video delivery report</a></p>
-<h2 id="workload">Workload<a class="headerlink" href="#workload" title="Permanent link">&para;</a></h2>
-<p>The sources are existing edge-test fixtures: four seconds of conveyor footage and the first four seconds of a Big Buck Bunny clip. The Bunny opening is smooth and low-detail; the conveyor contains textured moving material. These are a small pilot, not a representative video corpus.</p>
-<p>Both are encoded at <strong>1920×1080, 10fps</strong>, using either H.264 (libx264 veryfast, CRF23, no B frames) or MJPEG (quality 4). Each one-second segment is independently decodable. The settings are not matched for visual quality; this does not measure codec quality or downstream detection accuracy.</p>
+<h1 id="stable-video-capacity-on-bad-networks">Stable video capacity on bad networks<a class="headerlink" href="#stable-video-capacity-on-bad-networks" title="Permanent link">&para;</a></h1>
+<p>The question is <strong>how much video we can continuously carry without stalling playback</strong>, not how many bytes eventually arrive. This benchmark sweeps video bitrate and confirms the highest passing rates with longer runs.</p>
+<p><a class="md-button md-button--primary" href="../reports/sustained-video-v1.html">Explore sustainable bitrate results</a></p>
+<h2 id="what-stable-means">What “stable” means<a class="headerlink" href="#what-stable-means" title="Permanent link">&para;</a></h2>
+<p>The virtual player has a fixed <strong>two-second playout offset</strong>. Every one-second video segment must be complete by its scheduled playback time. We also reject a run if mean delivery latency grows by more than 250ms between the first ten and last ten segments, even if the buffer has not yet run dry.</p>
+<p>No skipped segments, adaptive bitrate or ever-growing buffer can turn a failure into a pass. The report shows deadline failures, accumulated extra stall time and delivery latency over time. Missing segments produce a lower bound on stall time at the observation cutoff.</p>
+<h2 id="find-a-capacity-bound">Find a capacity bound<a class="headerlink" href="#find-a-capacity-bound" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Encode actual conveyor footage at six requested H.264 rates: 0.25, 0.5, 1, 2, 4 and 5.5 Mbit/s.</li>
+<li>Screen each rate for <strong>30 seconds</strong> with TCP, KCP and plain UDP on each network profile.</li>
+<li>Test the highest screened pass and next higher rate in <strong>two independent 90-second runs</strong>.</li>
+<li>If the selected rate fails confirmation, step down and test the next lower rate twice.</li>
+<li>Report the highest confirmed actual bitrate and any tested failing upper neighbour.</li>
+</ol>
+<p>Actual encoded rates include segment/container overhead and differ from encoder targets. A result is a tested bound, not proof of an exact continuous maximum or a guarantee for arbitrary outages.</p>
+<h2 id="the-bad-networks">The bad networks<a class="headerlink" href="#the-bad-networks" title="Permanent link">&para;</a></h2>
+<p>Both directions have a <strong>5 Mbit/s</strong> limit and a 1,000-packet queue:</p>
 <table>
 <thead>
 <tr>
-<th>Source</th>
-<th style="text-align: right;">H.264 encoded bitrate</th>
-<th style="text-align: right;">MJPEG encoded bitrate</th>
+<th>Profile</th>
+<th>Additional impairment, each direction</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Conveyor</td>
-<td style="text-align: right;">7.357 Mbit/s</td>
-<td style="text-align: right;">12.991 Mbit/s</td>
+<td>Loss and jitter</td>
+<td>40ms delay, 10ms normal jitter, 1% independent random loss</td>
 </tr>
 <tr>
-<td>Bunny opening</td>
-<td style="text-align: right;">0.951 Mbit/s</td>
-<td style="text-align: right;">4.993 Mbit/s</td>
+<td>Burst loss</td>
+<td>20ms delay; Gilbert–Elliott bad-state entry1%, exit25%, bad-state loss80%, good-state loss0%</td>
 </tr>
 </tbody>
 </table>
-<p>These rates include the segment container, before network/protocol overhead. A link needs additional headroom. The large difference between clips shows why resolution and FPS alone do not determine video bandwidth.</p>
-<h2 id="network-experiment">Network experiment<a class="headerlink" href="#network-experiment" title="Permanent link">&para;</a></h2>
-<p>The suite runs TCP, KCP with built-in congestion control, and best-effort UDP. Each receives the same encoded payload, packet framing and pacing schedule. There are four profiles, each with 20ms delay per direction: 20 Mbit/s, 5 Mbit/s, 5 Mbit/s with 1% random loss, and 1 Mbit/s. Two repeats across all combinations produce <strong>96 trials</strong>. Three trials run concurrently on the same host.</p>
-<p>Each trial offers four seconds of video over four seconds, then permits three seconds to drain. A segment is <strong>complete</strong> only when its SHA-256 matches the original. It is <strong>on time</strong> only if complete within 1.5 seconds of its scheduled release. Every source segment was decoded to ten frames before transmission.</p>
-<p>A partly received segment earns byte-delivery credit but no usable-video credit. That is intentionally conservative: a specialised decoder could recover some frames from a damaged stream. It does not mean every UDP/RTP streaming system would lose as much video as this simple no-retry framing.</p>
-<h2 id="what-this-tells-us-about-the-edge">What this tells us about the edge<a class="headerlink" href="#what-this-tells-us-about-the-edge" title="Permanent link">&para;</a></h2>
-<p>At these settings, a 5 Mbit/s uplink cannot carry the conveyor's H.264 output in real time even before transport overhead. The Bunny clip fits much more easily. Choosing an appropriate encoding, frame rate or resolution is therefore necessary before tuning transport.</p>
-<p>The 20 Mbit/s capacity control distinguishes link saturation from transport startup and window behaviour. KCP uses the existing small-window controller, not a video-tuned configuration. Slow results here do not establish a limit on every possible KCP configuration.</p>
-<p>Use the report to compare <strong>complete seconds</strong>, <strong>on-time seconds</strong>, received payload and transmitted traffic. Looking at bytes alone can hide scattered losses that prevent reconstruction; looking only at latency of successful deliveries can hide missing video.</p>
-<h2 id="a-concrete-loss-comparison">A concrete loss comparison<a class="headerlink" href="#a-concrete-loss-comparison" title="Permanent link">&para;</a></h2>
-<p>For the Bunny H.264 clip on the 5 Mbit/s link with 1% loss, across two repeats:</p>
+<p>Real sender/receiver processes run in separate Linux namespaces through a netem router. Random loss is unseeded. This exploratory run uses three concurrent isolated trials on one host.</p>
+<h2 id="video-and-transport-contract">Video and transport contract<a class="headerlink" href="#video-and-transport-contract" title="Permanent link">&para;</a></h2>
+<p>The five-second conveyor edge fixture is encoded into independently decodable one-second H.264 segments at 1080p/10fps, then repeated. Each source segment is decoded and frame-counted before testing. Every received segment must match its SHA-256 before it can be played. The entire offered timeline stays in the denominator.</p>
+<p>TCP uses CUBIC and NODELAY. KCP uses built-in congestion control and128-segment windows; these are baseline settings, not a video-tuned controller. UDP has fragment metadata but no recovery or FEC. Requiring complete segments is more conservative than players that conceal packet damage or recover partial frames.</p>
+<p>Media is pre-encoded. This measures transport and a deterministic playback model; it does not run a live GStreamer/RTP/RTSP player or include capture/encoding time. Lower bitrates can reduce visual quality, which this benchmark does not evaluate. QUIC, TLS, production GCS and physical WAN links are not tested here.</p>
+<h2 id="measured-capacity-bounds">Measured capacity bounds<a class="headerlink" href="#measured-capacity-bounds" title="Permanent link">&para;</a></h2>
+<p>The completed run contains <strong>36 × 30-second screens and 20 × 90-second confirmations</strong>: 48 minutes of offered video across 56 trials. Every confirmed rate below passed both long repeats.</p>
 <table>
 <thead>
 <tr>
+<th>Network</th>
 <th>Transport</th>
-<th style="text-align: right;">Complete seconds / 8 offered</th>
-<th style="text-align: right;">On-time seconds / 8 offered</th>
+<th style="text-align: right;">Highest confirmed actual video bitrate</th>
+<th style="text-align: right;">Higher tested failure</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>TCP</td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">8</td>
+<td>loss_jitter</td>
+<td>tcp</td>
+<td style="text-align: right;">0.581 Mbit/s</td>
+<td style="text-align: right;">1.152 Mbit/s</td>
 </tr>
 <tr>
-<td>KCP</td>
-<td style="text-align: right;">8</td>
-<td style="text-align: right;">6</td>
+<td>loss_jitter</td>
+<td>kcp</td>
+<td style="text-align: right;">0.295 Mbit/s</td>
+<td style="text-align: right;">0.581 Mbit/s</td>
 </tr>
 <tr>
-<td>UDP</td>
-<td style="text-align: right;">2</td>
-<td style="text-align: right;">2</td>
+<td>loss_jitter</td>
+<td>udp</td>
+<td style="text-align: right;">None demonstrated</td>
+<td style="text-align: right;">0.295 Mbit/s (lowest tested)</td>
+</tr>
+<tr>
+<td>burst_loss</td>
+<td>tcp</td>
+<td style="text-align: right;">None demonstrated</td>
+<td style="text-align: right;">0.295 Mbit/s (lowest tested)</td>
+</tr>
+<tr>
+<td>burst_loss</td>
+<td>kcp</td>
+<td style="text-align: right;">None demonstrated</td>
+<td style="text-align: right;">0.295 Mbit/s (lowest tested)</td>
+</tr>
+<tr>
+<td>burst_loss</td>
+<td>udp</td>
+<td style="text-align: right;">None demonstrated</td>
+<td style="text-align: right;">0.295 Mbit/s (lowest tested)</td>
 </tr>
 </tbody>
 </table>
-<p>The clean 20 Mbit/s control delivered all eight conveyor seconds on time with TCP and UDP for both encodings. At 5 Mbit/s, neither encoding delivered any complete conveyor segment within the chosen deadline, regardless of transport. TCP still completed all eight H.264 seconds during the longer observation window: complete delivery and timely playback are different outcomes.</p>
-<h2 id="reproduce-and-inspect">Reproduce and inspect<a class="headerlink" href="#reproduce-and-inspect" title="Permanent link">&para;</a></h2>
-<p>The <a href="https://github.com/GeorgePearse/kcp/blob/docs/learning-fork-callout/benchmarks/video/README.md">benchmark README</a> documents dependencies, commands and the fixed workload. The <a href="https://github.com/GeorgePearse/kcp/blob/docs/learning-fork-callout/benchmarks/video/RESULTS.md">results ledger</a> contains every aggregate comparison and validation details. Source hashes, segment hashes, raw arrivals, network commands and counters are retained with the run.</p>
-<p>This is separate from the original transport-v2 benchmark. It uses pre-encoded media, excludes capture/encoding cost, and does not run GStreamer, RTP/RTSP, QUIC, TLS or the production GCS uploader. Random loss is unseeded and two repeats are exploratory. Raw footage is not included in this public documentation.</p>
+<p>On the loss/jitter link, TCP passed at <strong>0.581 Mbit/s</strong> and KCP at <strong>0.295 Mbit/s</strong>. At1.152 Mbit/s, one TCP confirmation delivered all90 segments by their deadlines but still failed because mean latency grew by344ms. Byte delivery or a short run would miss that warning sign.</p>
+<p>No transport demonstrated a stable rate on the burst-loss profile at the tested rates, down to0.295 Mbit/s. This does not establish that a lower rate, different buffer budget, FEC or another transport configuration cannot work.</p>
+<h2 id="evidence-and-reproduction">Evidence and reproduction<a class="headerlink" href="#evidence-and-reproduction" title="Permanent link">&para;</a></h2>
+<p>See the <a href="https://github.com/GeorgePearse/kcp/blob/docs/learning-fork-callout/benchmarks/sustained_video/README.md">frozen benchmark contract</a> and <a href="https://github.com/GeorgePearse/kcp/blob/docs/learning-fork-callout/benchmarks/sustained_video/RESULTS.md">results ledger</a>. All failed trials, arrival records, network counters and source/segment hashes are retained. Raw footage is not in this public site.</p>
+<p>The <a href="../video-payload-pilot/">earlier four-second payload pilot</a> is retained separately. It measured short-run delivery and codec sizes; it does <strong>not</strong> establish sustainable streaming capacity.</p>
 
 
 
@@ -907,13 +984,13 @@
         
         
           
-          <a href="../gpu-transport/" class="md-footer__link md-footer__link--next" aria-label="Next: From tensors to packets">
+          <a href="../video-payload-pilot/" class="md-footer__link md-footer__link--next" aria-label="Next: Short video payload pilot">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                From tensors to packets
+                Short video payload pilot
               </div>
             </div>
             <div class="md-footer__button md-icon">
