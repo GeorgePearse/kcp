@@ -48,6 +48,8 @@ These are different transport strategies to explore alongside KCP. They overlap 
 
 For a small learning exercise, compare KCP, ENet, and TCP with the same payloads, network delay, packet loss, and bandwidth limit. Measure delivery latency and bandwidth rather than assuming one is always faster.
 
+The [sender/receiver benchmark](benchmarks/network/README.md) runs that experiment with real processes and isolated Linux network namespaces, and generates an interactive report for six simulated network profiles.
+
 
 # Technical Specifications
 
