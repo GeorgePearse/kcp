@@ -1,10 +1,10 @@
 KCP - A Fast and Reliable ARQ Protocol
 ======================================
 
-[![Powered][3]][1] 
+[![Powered][3]][1]
 [![GitHub license][6]][7]
 [![Backers on Open Collective](https://opencollective.com/kcp/backers/badge.svg)](#backers)
- [![Sponsors on Open Collective](https://opencollective.com/kcp/sponsors/badge.svg)](#sponsors) 
+ [![Sponsors on Open Collective](https://opencollective.com/kcp/sponsors/badge.svg)](#sponsors)
 
 [1]: https://github.com/skywind3000/kcp
 [2]: https://github.com/skywind3000/kcp/raw/master/kcp.svg
@@ -90,9 +90,9 @@ Microsoft team members and community contributors keep the kcp port in vcpkg up 
 1. Create KCP object:
 
    ```cpp
-   // Initialize the kcp object, conv is an integer that represents the session number, 
-   // same as the conv of tcp, both communication sides shall ensure the same conv, 
-   // so that mutual data packets can be recognized, user is a pointer which will be 
+   // Initialize the kcp object, conv is an integer that represents the session number,
+   // same as the conv of tcp, both communication sides shall ensure the same conv,
+   // so that mutual data packets can be recognized, user is a pointer which will be
    // passed to the callback function.
    ikcpcb *kcp = ikcp_create(conv, user);
    ```
@@ -100,9 +100,9 @@ Microsoft team members and community contributors keep the kcp port in vcpkg up 
 2. Set the callback function:
 
    ```cpp
-   // KCP lower layer protocol output function, which will be called by KCP when it 
-   // needs to send data, buf/len represents the buffer and data length. 
-   // user refers to the incoming value at the time the kcp object is created to 
+   // KCP lower layer protocol output function, which will be called by KCP when it
+   // needs to send data, buf/len represents the buffer and data length.
+   // user refers to the incoming value at the time the kcp object is created to
    // distinguish between multiple KCP objects
    int udp_output(const char *buf, int len, ikcpcb *kcp, void *user)
    {
@@ -115,9 +115,9 @@ Microsoft team members and community contributors keep the kcp port in vcpkg up 
 3. Call update in an interval:
 
    ```cpp
-   // Call ikcp_update at a certain frequency to update the kcp state, and pass in 
-   // the current clock (in milliseconds). If the call is executed every 10ms, or 
-   // ikcp_check is used to determine time of the next call for update, no need to 
+   // Call ikcp_update at a certain frequency to update the kcp state, and pass in
+   // the current clock (in milliseconds). If the call is executed every 10ms, or
+   // ikcp_check is used to determine time of the next call for update, no need to
    // call every time;
    ikcp_update(kcp, millisec);
    ```
@@ -160,7 +160,7 @@ The protocol default mode is a standard ARQ, and various acceleration switches c
 
 4. Minimum RTO:
 
-   No matter TCP or KCP, they have the limitation for the minimum RTO when calculating the RTO, even if the calculated RTO is 40ms, as the default RTO is 100ms, the protocol can only detect packet loss after 100ms, which is 30ms in the fast mode, and the value can be manually changed: 
+   No matter TCP or KCP, they have the limitation for the minimum RTO when calculating the RTO, even if the calculated RTO is 40ms, as the default RTO is 100ms, the protocol can only detect packet loss after 100ms, which is 30ms in the fast mode, and the value can be manually changed:
    ```cpp
    kcp->rx_minrto = 10;
    ```
@@ -182,7 +182,7 @@ Both the use and configuration of the protocol is straightforward, in most cases
 - [dog-tunnel](https://github.com/vzex/dog-tunnel): Network tunnel developed by GO, using KCP to greatly improve the transmission speed, and migrated a GO version of the KCP.
 - [v2ray](https://www.v2ray.com)：Well-known proxy software, Shadowsocks replacement, integrated with kcp protocol after 1.17, using UDP transmission, no data packet features.
 - [HP-Socket](https://github.com/ldcsaa/HP-Socket): High Performance TCP/UDP/HTTP Communication Component.
-- [frp](https://github.com/fatedier/frp): A fast reverse proxy to help you expose a local server behind a NAT or firewall to the internet. 
+- [frp](https://github.com/fatedier/frp): A fast reverse proxy to help you expose a local server behind a NAT or firewall to the internet.
 - [asio-kcp](https://github.com/libinzhangyuan/asio_kcp): Use the complete UDP network library of KCP, complete implementation of UDP-based link state management, session control and KCP protocol scheduling, etc.
 - [kcp-cpp](https://github.com/Unit-X/kcp-cpp): Multi-platform (Windows, MacOS, Linux) C++ implementation of KCP as a simple library in your application. Contains socket handling and helper functions for all platforms.
 - [kcp-perl](https://github.com/Homqyy/kcp-perl): Perl extensions for kcp. It's OOP and Perl-Like.
@@ -200,7 +200,7 @@ Both the use and configuration of the protocol is straightforward, in most cases
 - [kcp-rs](https://github.com/en/kcp-rs): The rust migration of KCP
 - [kcp-rust-native](https://github.com/b23r0/kcp-rust-native)：KCP bindings for Rust
 - [lua-kcp](https://github.com/linxiaolong/lua-kcp): Lua extension of KCP, applicable for Lua server
-- [node-kcp](https://github.com/leenjewel/node-kcp): KCP interface for node-js 
+- [node-kcp](https://github.com/leenjewel/node-kcp): KCP interface for node-js
 - [nysocks](https://github.com/oyyd/nysocks): Nysocks provides proxy services base on libuv and kcp for nodejs users. Both SOCKS5 and ss protocols are supported in the client.
 - [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android): Shadowsocks for android has integrated kcptun using kcp protocol to accelerate shadowsocks, with good results
 - [kcpuv](https://github.com/elisaday/kcpuv): The kcpuv library developed with libuv, currently still in the early alpha phase.
